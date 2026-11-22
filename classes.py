@@ -4,7 +4,7 @@ from dataclasses import dataclass
 ####################################################################################
 # Store Physical Parameters (frozen)
 ####################################################################################
-
+# test change 
 @dataclass(frozen=True)
 class Physical_Parameters: 
 
@@ -23,7 +23,7 @@ class Physical_Parameters:
     @property
     def alpha(self):
         """
-        m^{2}s^{-1}, liquid water thermal diffusivity
+        m^{2}s^{-1}, ice thermal diffusivity
         
         α = k_s / (ρ_0 C_pl)
         """
@@ -36,8 +36,9 @@ class Physical_Parameters:
     beta_S : float = 8.3e-4   # (g/kg)^{-1}, saline contraction coefficient    
     
     # Water related parameters
-    rho_0 : int = 1000    # kgm^{-3}, reference water density at 0 overpressure, salinity
-    rho_s : int = 917     # kgm^{-3}, pure water ice
+    rho_0 : float = 1000.0    # kgm^{-3}, reference water density at 0 overpressure, salinity
+    rho_s : float = 917.0     # kgm^{-3}, pure water ice
+    eta   : float = 2.0e-3    # Pas, pure water dynamic viscosity, Buffo et al. (2020)
 
     @property
     def rho_b(self): 
@@ -92,19 +93,20 @@ p = Physical_Parameters()
 class Domain_Parameters: 
     def __init__(self):
         self.N_iter : int = 10**7               # number of iterations
-        self.N      : int = 20000               # number of cells in the domain  
+        self.N_s    : int = 500                 # number of cells (radial) 
+        self.N_z    : int = 2 * self.N_s        # number of cells (axial)
 
-        self.R_i : float  = 500.0               # m, radius of the resevoir
-        self.R   : float  = 1000.0              # m, radius of the entire domain
-        self.dr  : float  = self.R / self.N     # m, radial distance increment
+        self.R_i : float = 500.0                # m, radius of the resevoir
+        self.R   : float = 600.0                # m, radius of the entire domain
 
-        self.r_f : np.ndarray = np.arange(0, self.N + 1, 1) * self.dr  # m, cell faces 
-        self.r_c : np.ndarray = self.r_f[: -1] + self.dr / 2           # m, cell centres
+        self.ds  : float = self.R / self.N_s       # m, radial distance increment
+        self.dz  : float = 2 * self.R / self.N_z   # m, axial distance increment
 
-        self.A : np.ndarray = self.r_f ** 2   # m^2, surface area of spherical shell at r_f
-        self.V : np.ndarray = (self.r_f[1:] ** 3 - self.r_f[:-1] ** 3) / 3  # m^3, volume of shells
+        self.s_f : np.ndarray = np.arange(0, self.N + 1, 1) * self.ds  # m, cell faces (radial)
+        self.s_c : np.ndarray = self.s_f[: -1] + self.ds / 2           # m, cell centres (radial)
+        self.z_c : np.ndarray = self.s_f[: -1] + self.dz / 2           # m, cell centres (axial)
 
-        self.dt : float = self.dr ** 2 /(2 * p.alpha * 10)  # s, time increment
+        self.dt : float = self.ds ** 2 /(2 * p.alpha * 10)  # s, time increment
 
 d = Domain_Parameters()
 
@@ -126,33 +128,24 @@ class State:
 
     dP    : float         # overpressure term
 
-    u_r   : np.ndarray    # radial speed
-
-    J           : np.ndarray    # Brine flux
-    q           : np.ndarray    # Heat flux
-    h_faces     : np.ndarray    # Enthalpy at the faces
-    C_faces     : np.ndarray    # Liquid salinity at the faces
-    rho_l_faces : np.ndarray    # Liquid density at the faces
+    u_s   : np.ndarray    # radial speed
+    u_z   : np.ndarray    # vertical speed
 
     rho_l_old   : np.ndarray    # Store old liquid density values
     chi_old     : np.ndarray    # Store old liquid fraction values
 
 state = State(
-        H     = np.zeros(d.N), 
-        h_l   = np.zeros(d.N), 
-        h_s   = np.zeros(d.N), 
-        S     = np.zeros(d.N), 
-        rho_l = np.full(d.N, p.rho_b), 
+        H     = np.zeros((d.N, 2)), 
+        h_l   = np.zeros((d.N, 2)), 
+        h_s   = np.zeros((d.N, 2)), 
+        S     = np.zeros((d.N, 2)), 
+        rho_l = np.full((d.N, 2), p.rho_b), 
         T     = np.full(d.N, p.T_0), 
         C     = np.full(d.N, p.C_init), 
         chi   = np.ones(d.N),
         dP    = 0.0, 
-        u_r   = np.zeros(d.N + 1), 
-        J     = np.zeros(d.N + 1), 
-        q     = np.zeros(d.N + 1), 
-        h_faces     = np.zeros(d.N + 1), 
-        C_faces     = np.zeros(d.N + 1), 
-        rho_l_faces = np.full(d.N + 1, p.rho_b), 
+        u_s   = np.zeros(d.N + 1), 
+        u_z   = np.zeros(d.N + 1), 
         rho_l_old   = np.zeros(d.N), 
         chi_old     = np.zeros(d.N)
               ) 
