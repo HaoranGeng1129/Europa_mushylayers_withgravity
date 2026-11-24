@@ -1,4 +1,264 @@
-from numpy import np
+from classes import p, d, state
+import numpy as np
+
+
+####################################################################################
+# Enthalpy
+####################################################################################
+
+def calculate_liquid_enthalpy(state):
+    """
+    Specific enthalpy of liquid water
+
+    h_l = L_w + C_pl * (T - T_m) + dP / ρ_l
+    """
+    return p.L_w + p.C_pl * (state.T - p.T_m) + state.dP / state.rho_l
+
+
+def calculate_ice_enthalpy(state):
+    """
+    Specific enthalpy of ice
+
+    h_s = C_ps (T - T_m) + dP / ρ_s
+    """
+    return p.C_ps * (state.T - p.T_m) + state.dP / p.rho_s
+
+
+def calculate_enthalpy(state):
+    """
+    Enthalpy
+
+    H = ρ_l h_l χ + ρ_s h_s (1 - χ)
+    """
+    return state.rho_l * state.h_l * state.chi + p.rho_s * state.h_s * (1 - state.chi)
 
 
 
+####################################################################################
+# Bulk Salinity
+####################################################################################
+
+def calculate_bulk_salinity(state):
+    """
+    Bulk salinity
+
+    S = ρ_l C χ + ρ_s C_s (1 - χ), with C_s = 0
+    """
+    return state.rho_l * state.C * state.chi
+
+
+
+####################################################################################
+# Enthalpy Update
+####################################################################################
+
+def calculate_liquid_density_at_faces(state):
+    """
+    
+    """ 
+    rho_l_radial_faces = 0
+    rho_l_polar_faces  = 0
+
+    return rho_l_radial_faces, rho_l_polar_faces
+
+
+def calculate_liquid_enthalpy_at_faces(state):
+    """ 
+    
+    """
+    state.h_l = calculate_liquid_enthalpy(state)    
+
+    h_l_radial_faces = 0 
+    h_l_polar_faces  = 0 
+
+    return h_l_radial_faces, h_l_polar_faces
+
+
+def calculate_flow_speed_at_faces(state):
+    """ 
+    From Darcy's law (radial), 
+
+    and from Darcy's law (polar), 
+    
+    """
+    u_radial_faces = 0
+    u_polar_faces  = 0
+
+    return u_radial_faces, u_polar_faces
+
+
+def calculate_weighted_thermal_conductivity_at_faces(state):
+    """ 
+    The thermal conductivity weighted by liquid fraction, used to calculate heat 
+    flux. Note that the thermal conductivities at the polar faces need to be
+    calculated separately. 
+    
+    k_bar_r = 2 k_a k_b / (k_a + k_b),
+
+    where k = k_l χ + k_s (1 - χ). 
+    """
+    k = p.k_l * state.chi + p.k_s * (1 - state.chi)
+
+    k_bar_radial_faces = 2 * k[1:, :] * k[:-1, :] / (k[1:, :] + k[:-1, :])
+    k_bar_polar_faces  = 2 * k[:, 1:] * k[:, :-1] / (k[:, 1:] + k[:, :-1])
+
+    return k_bar_radial_faces, k_bar_polar_faces
+
+
+def calculate_heat_flux(state):
+    """ 
+    Heat flux through unit radial area of the faces (J s^{-1})
+
+    q^r = - k_bar_r (T_{i+1, j} - T{i, j}) / dr,
+
+    That through unit polar area 
+
+    q^θ = - (k_bar_theta/r_c) (T_{i, j+1} - T_{i, j}) / dθ). 
+
+    for faces sandwiched between cells. The flux at r = 0 should 
+    be zero since energy is conserved at the centre of the sphere. 
+    The flux at r = R is related to the difference between the 
+    temperature at the boundary, T_B, and the temperature of the
+    last cell, T[-1]. Similarly, the flux at θ = 0, π should both 
+    be zero. 
+    """
+    k_bar_radial_faces, k_bar_polar_faces = calculate_weighted_thermal_conductivity_at_faces(state)
+
+    q_radial_faces = np.zeros((d.N_radial + 1, d.N_polar))
+    q_polar_faces  = np.zeros((d.N_radial, d.N_polar + 1))
+
+    q_radial_faces[0, :]    = 0.0
+    q_radial_faces[1:-1, :] = - k_bar_radial_faces * (state.T[1:, :] - state.T[:-1, :]) / d.dr 
+    q_radial_faces[-1, :]   = - p.k_s * (p.T_B - state.T[-1, :]) / (d.dr / 2)
+
+    q_polar_faces[:, 0]    = 0.0
+    q_polar_faces[:, 1:-1] = - k_bar_polar_faces * (state.T[:, 1:] - state.T[:, :-1]
+                                                    ) / (d.radial_centres[:, None] * d.dtheta)
+    q_polar_faces[:, -1]   = 0.0
+
+    return q_radial_faces, q_polar_faces 
+
+
+def calculate_enthalpic_flux(state):
+    """ 
+    J_r = ρ_l h_l u_r + q_r, and
+
+    J_theta = ρ_l h_l u_theta + q_theta.
+    """
+    rho_l_radial_faces, rho_l_polar_faces = calculate_liquid_density_at_faces(state)
+    h_l_radial_faces, h_l_polar_faces     = calculate_liquid_enthalpy_at_faces(state)
+    u_radial_faces, u_polar_faces         = calculate_flow_speed_at_faces(state)
+
+    q_radial_faces, q_polar_faces = calculate_heat_flux(state)
+
+    J_radial_faces = rho_l_radial_faces * h_l_radial_faces * u_radial_faces + q_radial_faces
+    J_polar_faces  = rho_l_polar_faces * h_l_polar_faces * u_polar_faces + q_polar_faces
+
+    return J_radial_faces, J_polar_faces
+
+
+def calculate_enthalpy_update(state):
+    """ 
+    dH = dt (F_r{i+1/2, j} - F_r{i-1/2, j} + F_theta{i, j+1/2} - F_theta{i, j-1/2}) / V
+    
+    """
+    J_radial_faces, J_polar_faces = calculate_enthalpic_flux(state)
+    F_r     = d.A_radial_faces * J_radial_faces
+    F_theta = d.A_polar_faces  * J_polar_faces 
+    
+    return - d.dt * (F_r[1:, :] - F_r[:-1, :] + F_theta[:, 1:] - F_theta[:, :-1])/ d.V
+
+
+
+
+
+####################################################################################
+# Bulk Salinity Update
+####################################################################################
+
+def calculate_liquid_salinity_at_faces(state):
+    """ 
+    
+    """
+    C_l_radial_faces = 0.0
+    C_l_polar_faces  = 0.0
+
+    return C_l_radial_faces, C_l_polar_faces
+
+
+def calculate_bulk_salinity_update(state):
+    """ 
+    dS = dt (G_r{i+1/2, j} - G_r{i-1/2, j} + G_theta{i, j+1/2} - G_theta{i, j-1/2}) / V
+    """
+    rho_l_radial_faces, rho_l_polar_faces = calculate_liquid_density_at_faces(state)
+    C_l_radial_faces, C_l_polar_faces     = calculate_liquid_salinity_at_faces(state)
+    u_radial_faces, u_polar_faces         = calculate_flow_speed_at_faces(state)
+
+    G_r     = d.A_radial_faces * rho_l_radial_faces * C_l_radial_faces * u_radial_faces
+    G_theta = d.A_polar_faces  * rho_l_polar_faces * C_l_polar_faces * u_polar_faces
+
+    return - d.dt * (G_r[1:, :] - G_r[:-1, :] + G_theta[:, 1:] - G_theta[:, :-1])/ d.V
+
+
+
+
+####################################################################################
+# Overpressure Term, dP
+####################################################################################
+
+def calculate_overpressure_term(state):
+    """ 
+    dP = 1/β ln[(M_0 - ρ_s Σ_i (1 - χ) V_i) / (ρ_0 Σ_i exp{β_S(C - C_0) χ V_i })]
+    """
+    reservoir, shell = get_reservoir_geometry_mask()
+
+    numerator = p.M_reservoir - p.rho_s * np.sum( (1 - state.chi) * d.V )
+    denominator = p.rho_0 * np.sum( np.exp(p.beta_S * (state.C - p.C_0)) * state.chi * d.V )
+
+    return np.log(numerator / denominator) / p.beta 
+
+
+
+####################################################################################
+# MISC
+####################################################################################
+
+def calculate_liquid_density(state):
+    """ 
+    EOS to calculate the density of liquid water
+
+    ρ = ρ_0 exp[β ΔP + β_S (C - C_0)].
+    """ 
+    return p.rho_0 * np.exp(p.beta * state.dP + p.beta_S * (state.C - p.C_0))
+
+
+def calculate_liquidus_temperature(state):
+    """
+    Liquidus temperature of briny cryomagma
+
+    T_L = T_m - m C - Γ (P_0 + ΔP) 
+    """
+    return p.T_m - p.m * state.C - p.Gamma * (p.static_pressure + state.dP)
+
+
+def calculate_eutectic_temperature(state):
+    """
+    Eutectic temperature of briny cryomagma
+
+    T_E = T_m - m C_E - Γ (P_0 + ΔP)    
+    """
+    return p.T_m - p.m * p.C_E - p.Gamma * (p.static_pressure + state.dP)
+
+
+def get_reservoir_geometry_mask():
+    """ 
+    Geometry mask to differentiate the reservoir (0 < r < R_reservoir), and the 
+    surrounding heat-conducting shell (R_reservoir < r < R_domain). Note that the
+    mask has to be of dimension N_radial x N_polar. Call np.broadcast_to() to 
+    broadcast a row vector of length N_radial down N_polar columns
+    """
+
+    reservoir = np.broadcast_to((d.radial_centres <= d.R_reservoir)[:, None], (d.N_radial, d.N_polar))
+    shell     = np.broadcast_to((d.radial_centres >  d.R_reservoir)[:, None], (d.N_radial, d.N_polar))
+
+    return reservoir, shell 

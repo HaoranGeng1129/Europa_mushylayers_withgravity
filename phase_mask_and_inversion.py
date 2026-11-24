@@ -1,4 +1,4 @@
-from classes import p
+from classes import p, d
 from functions import calculate_liquid_density, calculate_eutectic_temperature
 import numpy as np
 
@@ -67,7 +67,7 @@ def get_phase_masks(state):
     """
     Get phase masks for liquid core(L), mushy layer(M), eutectic front(E),and pure solid (S)
 
-    liquid_mask: H >= H_l
+    core_mask: H >= H_l
     mushy_mask: (H < H_l) & (H >= H_E)
     eutectic_mask: (H < H_E) & (H >= H_s)
     solid_mask: H < H_s
@@ -86,13 +86,44 @@ def get_phase_masks(state):
 
 
 ####################################################################################
+# Core Inversion and Mixing
+####################################################################################
+
+def core_inversion_and_mixing(state, phase_masks):
+    """ 
+    np.sum() the average enthalpy in the core, H_core, and bulk salinity, S_core. A 
+    global value of the liquid density is also computd. The temperature in the core, 
+    T_core, and the liquid salinity are found by inversion. The core is then mixed by 
+    setting all temperature and salinity values to the inverted results. 
+    """
+    Liquid = phase_masks[0]
+
+    V_core = np.sum(d.V[Liquid])   # Total volume of the core
+    H_core = np.sum(state.H[Liquid] * d.V[Liquid]) / V_core
+    S_core = np.sum(state.S[Liquid] * d.V[Liquid]) / V_core 
+
+    rho_l_core = np.sum(state.rho_l[Liquid] * d.V[Liquid]) / V_core 
+    T_core     = p.T_m + (H_core - state.dP - rho_l_core * p.L_w) / (rho_l_core * p.C_pl)
+    C_core     = S_core / rho_l_core
+
+    # Mixing 
+    state.H[Liquid] = H_core
+    state.S[Liquid] = S_core
+    state.T[Liquid] = T_core
+    state.C[Liquid] = C_core
+
+    return
+
+
+
+####################################################################################
 # Inversion
 ####################################################################################
 
 def calculate_liquid_fraction(state, phase_masks):
     """ 
-    χ in liquid: χ = 1
-     
+    χ in core: χ = 1
+
     Formula for χ in mush: 
     aχ² + bχ + c = 0. 
     Therefore, 
@@ -136,9 +167,7 @@ def calculate_liquid_fraction(state, phase_masks):
 
 def calculate_temperature(state, phase_masks):
     """ 
-    Formula for temperature in liquid: 
-    T = T_m + (H - ΔP - ρ_l L_w) / (ρ_l C_pl)
-    
+    Calculating the temperature of the mush, eutectic and solid.    
     Formula for temperature in mush: 
     T = T_m + (H - ΔP - ρ_l χ L_w) / (a0 + a1 χ)
     
@@ -156,7 +185,6 @@ def calculate_temperature(state, phase_masks):
     a1 = rho_l[Mushy] * p.C_pl - p.rho_s * p.C_ps
     T_E = calculate_eutectic_temperature(state)
 
-    T[Liquid]   = p.T_m + (H[Liquid] - dP - rho_l[Liquid] * p.L_w) / (rho_l[Liquid] * p.C_pl)
     T[Mushy]    = p.T_m + (H[Mushy] - dP - rho_l[Mushy] * chi[Mushy] * p.L_w) / (a0 + a1 * chi[Mushy])
     T[Eutectic] = T_E
     T[Solid]    = p.T_m + (H[Solid] - dP) / (p.rho_s * p.C_ps)
@@ -166,9 +194,6 @@ def calculate_temperature(state, phase_masks):
 
 def calculate_liquid_salinity(state, phase_masks):  
     """ 
-    Formula for C in liquid: 
-    C = S / ρ_l, where ρ_l = ρ_l(ΔP, C_0)
-    
     Formula for C in mush: 
     C = S / (ρ_l χ) 
 
@@ -184,7 +209,6 @@ def calculate_liquid_salinity(state, phase_masks):
 
     rho_l = calculate_liquid_density(state)
   
-    C[Liquid] = S[Liquid] / rho_l[Liquid]
     C[Mushy] = S[Mushy] / (rho_l[Mushy] * chi[Mushy])
     C[Eutectic] = p.C_E 
     C[Solid] = 0.0
@@ -194,14 +218,18 @@ def calculate_liquid_salinity(state, phase_masks):
 
 def inversion(state):
     """ 
-    Function that will be called in main.py to invert enthalpy, H, and 
+    Function that is called in main.py to invert enthalpy, H, and 
     bulk salinity, S, to obtain the liquid fraction, χ, temperature, T, 
-    and liquid salinity, C. 
+    and liquid salinity, C. core_inversion_and_mixing is called in this
+    function after inversion to mix the core. 
     """
     phase_masks = get_phase_masks(state)
 
     chi = calculate_liquid_fraction(state, phase_masks)
     T   = calculate_temperature(state, phase_masks)
     C   = calculate_liquid_salinity(state, phase_masks)
+
+    # Mixes the core
+    core_inversion_and_mixing(state, phase_masks)
 
     return chi, T, C 

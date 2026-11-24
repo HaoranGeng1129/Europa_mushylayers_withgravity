@@ -50,7 +50,7 @@ class Physical_Parameters:
         return self.rho_0 * np.exp(self.beta_S * (self.C_init - self.C_0) )
 
     # Eutectic parameters
-    C_E   : int = 175     # g/kg, liquid salinity at the eutectic point for MgSO4-H20
+    C_E : float = 175     # g/kg, liquid salinity at the eutectic point for MgSO4-H20
 
     @property
     def S_ice(self):
@@ -63,9 +63,17 @@ class Physical_Parameters:
     g     : float = 1.315       # ms^{-2}, gravity on Europa, Pappalardo et al. (2009)
     depth : float = 2000.0      # m, depth of the resevoir, H in Lesage's paper
 
+    @property 
+    def M_reservoir(self): 
+        """ 
+        kg, total mass of the reservoir, a constant since only heat is exchanged at the
+        reservoir boundary
+        """
+        return 4 * self.rho_b * np.pi * d.R_reservoir / 3
+
     # Pressure related parameters
     beta    : float = 3.5e-10   # Pa^{-1}, liquid water compressibility
-    sigma_c : float = 1.5e6     # Pa , tensile strength of ice
+    sigma_c : float = 1.5e6     # Pa , tensile strength of ice 
 
     @property
     def Gamma(self):
@@ -83,6 +91,13 @@ class Physical_Parameters:
         """
         return 2 * (self.sigma_c + self.rho_s * self.g * self.depth)
 
+    @property
+    def static_pressure(self):
+        """ 
+        P_0 = ρ_s g H
+        """
+        return self.rho_s * self.g * self.depth
+
 p = Physical_Parameters()
 
 
@@ -92,21 +107,35 @@ p = Physical_Parameters()
 ####################################################################################
 class Domain_Parameters: 
     def __init__(self):
-        self.N_iter : int = 10**7               # number of iterations
-        self.N_s    : int = 500                 # number of cells (radial) 
-        self.N_z    : int = 2 * self.N_s        # number of cells (axial)
+        self.N_iter   : int = 10**7              # number of iterations
+        self.N_radial : int = 600                # number of cells (radial) 
+        self.N_polar  : int = 64                 # number of cells (polar)
 
-        self.R_i : float = 500.0                # m, radius of the resevoir
-        self.R   : float = 600.0                # m, radius of the entire domain
+        self.R_reservoir : float = 500.0                # m, radius of the resevoir
+        self.R_domain    : float = 600.0                # m, radius of the entire domain
 
-        self.ds  : float = self.R / self.N_s       # m, radial distance increment
-        self.dz  : float = 2 * self.R / self.N_z   # m, axial distance increment
+        self.dr     : float = self.R_domain / self.N_radial  # m, radial distance increment
+        self.dtheta : float = np.pi / self.N_polar           # rad, polar angle increment
 
-        self.s_f : np.ndarray = np.arange(0, self.N + 1, 1) * self.ds  # m, cell faces (radial)
-        self.s_c : np.ndarray = self.s_f[: -1] + self.ds / 2           # m, cell centres (radial)
-        self.z_c : np.ndarray = self.s_f[: -1] + self.dz / 2           # m, cell centres (axial)
+        # Coordinates of the radial cell faces and centres, and polar faces and centres
+        self.radial_faces   = np.linspace(0, self.R_domain, self.N_radial + 1)
+        self.radial_centres = 0.5 * (self.radial_faces[1:] + self.radial_faces[:-1])              
+        self.polar_faces    = np.linspace(0, np.pi, self.N_polar + 1)     
+        self.polar_centres  = 0.5 * (self.polar_faces[1:] + self.polar_faces[:-1])     
 
-        self.dt : float = self.ds ** 2 /(2 * p.alpha * 10)  # s, time increment
+        # Radial and polar areas, np.outer() to obtain an (N_r, N_theta) array
+        self.A_radial_faces = 2 * np.pi * np.outer(self.radial_faces[:] ** 2, 
+                                                         np.cos(self.polar_faces[:-1]) 
+                                                         - np.cos(self.polar_faces[1:]))
+        self.A_polar_faces  = np.pi * np.outer(self.radial_faces[1:] ** 2 - 
+                                                            self.radial_faces[:-1] ** 2, 
+                                                            np.sin(self.polar_faces[:]))
+
+        # Volume
+        self.V = 2 * np.pi * np.outer(self.radial_faces[1:] ** 3 - self.radial_faces[:-1] ** 3, 
+                                np.cos(self.polar_faces[:-1]) - np.cos(self.polar_faces[1:])) / 3 
+        
+        self.dt : float = self.dr ** 2 /(2 * p.alpha * 10)  # s, time increment
 
 d = Domain_Parameters()
 
@@ -128,26 +157,26 @@ class State:
 
     dP    : float         # overpressure term
 
-    u_s   : np.ndarray    # radial speed
-    u_z   : np.ndarray    # vertical speed
-
     rho_l_old   : np.ndarray    # Store old liquid density values
     chi_old     : np.ndarray    # Store old liquid fraction values
 
+# Defining dimensions of arrays
+shape_centre       = (d.N_radial, d.N_polar)      # cell centre 
+shape_radial_faces = (d.N_radial + 1, d.N_polar)  # radial faces
+shape_polar_faces  = (d.N_radial, d.N_polar + 1)  # polar faces
+
 state = State(
-        H     = np.zeros((d.N, 2)), 
-        h_l   = np.zeros((d.N, 2)), 
-        h_s   = np.zeros((d.N, 2)), 
-        S     = np.zeros((d.N, 2)), 
-        rho_l = np.full((d.N, 2), p.rho_b), 
-        T     = np.full(d.N, p.T_0), 
-        C     = np.full(d.N, p.C_init), 
-        chi   = np.ones(d.N),
+        H     = np.zeros(shape_centre), 
+        h_l   = np.zeros(shape_centre), 
+        h_s   = np.zeros(shape_centre), 
+        S     = np.zeros(shape_centre), 
+        rho_l = np.full(shape_centre, p.rho_b), 
+        T     = np.full(shape_centre, p.T_0), 
+        C     = np.full(shape_centre, p.C_init), 
+        chi   = np.ones(shape_centre),
         dP    = 0.0, 
-        u_s   = np.zeros(d.N + 1), 
-        u_z   = np.zeros(d.N + 1), 
-        rho_l_old   = np.zeros(d.N), 
-        chi_old     = np.zeros(d.N)
+        rho_l_old = np.zeros(shape_centre), 
+        chi_old   = np.zeros(shape_centre)
               ) 
 
 
