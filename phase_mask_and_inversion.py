@@ -15,7 +15,7 @@ def get_liquid_condition(state):
     """
     # threshold at liquid condition
     C   = state.S / state.rho_l
-    T_L = p.T_m - p.m * C - p.Gamma * state.dP 
+    T_L = p.T_m - p.m * C - p.Gamma * (p.static_pressure + state.dP) 
 
     return state.rho_l * (p.L_w + p.C_pl * (T_L - p.T_m)) + state.dP
                     
@@ -209,7 +209,7 @@ def calculate_liquid_salinity(state, phase_masks):
 
     rho_l = calculate_liquid_density(state)
   
-    C[Mushy] = S[Mushy] / (rho_l[Mushy] * chi[Mushy])
+    C[Mushy] = np.divide(S, rho_l * chi, out=np.zeros_like(S), where=chi > 0)[Mushy]
     C[Eutectic] = p.C_E 
     C[Solid] = 0.0
 

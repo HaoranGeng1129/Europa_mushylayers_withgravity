@@ -212,8 +212,9 @@ def calculate_overpressure_term(state):
     """
     reservoir, shell = get_reservoir_geometry_mask()
 
-    numerator = p.M_reservoir - p.rho_s * np.sum( (1 - state.chi) * d.V )
-    denominator = p.rho_0 * np.sum( np.exp(p.beta_S * (state.C - p.C_0)) * state.chi * d.V )
+    numerator = p.M_reservoir - p.rho_s * np.sum( ((1 - state.chi) * d.V)[reservoir] )
+    denominator = p.rho_0 * np.sum( 
+        (np.exp(p.beta_S * (state.C - p.C_0)) * state.chi * d.V)[reservoir] )
 
     return np.log(numerator / denominator) / p.beta 
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 ####################################################################################
 # Store Physical Parameters (frozen)
 ####################################################################################
-# test change 
+
 @dataclass(frozen=True)
 class Physical_Parameters: 
 
@@ -69,7 +69,7 @@ class Physical_Parameters:
         kg, total mass of the reservoir, a constant since only heat is exchanged at the
         reservoir boundary
         """
-        return 4 * self.rho_b * np.pi * d.R_reservoir / 3
+        return ( 4 * self.rho_b * np.pi * d.R_reservoir ** 3 ) / 3
 
     # Pressure related parameters
     beta    : float = 3.5e-10   # Pa^{-1}, liquid water compressibility
@@ -194,13 +194,3 @@ class Historic_Data:
     time_history  : np.ndarray
     dP_history    : np.ndarray  # overpressure term 
 
-
-h = Historic_Data(
-        T_history     = np.zeros((d.N_iter // 500, d.N)), 
-        rho_l_history = np.zeros((d.N_iter // 500, d.N)), 
-        H_history     = np.zeros((d.N_iter // 500, d.N)),  
-        S_history     = np.zeros((d.N_iter // 500, d.N)),  
-
-        time_history  = np.zeros(d.N_iter // 500),
-        dP_history    = np.zeros(d.N_iter // 500)      
-                )
