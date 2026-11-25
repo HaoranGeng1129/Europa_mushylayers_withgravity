@@ -1,5 +1,5 @@
 from classes import p, d
-from functions import calculate_liquid_density, calculate_eutectic_temperature
+from enthalpy_and_bulk_salinity_update import calculate_liquid_density, calculate_eutectic_temperature
 import numpy as np
 
 
@@ -152,8 +152,8 @@ def calculate_liquid_fraction(state, phase_masks):
 
     a0  = p.rho_s * p.C_ps  
     a1  = rho_l * p.C_pl - p.rho_s * p.C_ps
-    a   = a1 * p.Gamma * dP - rho_l * p.L_w
-    b   = (a1 * p.m * S) / rho_l + a0 * p.Gamma * dP + H - dP
+    a   = a1 * p.Gamma * (p.static_pressure + dP) - rho_l * p.L_w
+    b   = (a1 * p.m * S) / rho_l + a0 * p.Gamma * (p.static_pressure + dP) + H - dP
     c   = (a0 * p.m * S) / rho_l
     T_E = calculate_eutectic_temperature(state)
 
