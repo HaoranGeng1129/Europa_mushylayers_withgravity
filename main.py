@@ -2,7 +2,7 @@
 # Main script
 ####################################################################################
 from classes import p, d, state
-from functions import (
+from enthalpy_and_bulk_salinity_update import (
                     calculate_enthalpy_update,
                     calculate_bulk_salinity_update, 
                     calculate_overpressure_term, 
@@ -14,7 +14,6 @@ from functions import (
                        )
 
 from phase_mask_and_inversion import inversion
-
 
 # Initial values
 ice            = d.radial_centres > d.R_reservoir

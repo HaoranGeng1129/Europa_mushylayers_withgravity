@@ -69,7 +69,7 @@ class Physical_Parameters:
         kg, total mass of the reservoir, a constant since only heat is exchanged at the
         reservoir boundary
         """
-        return ( 4 * self.rho_b * np.pi * d.R_reservoir ** 3 ) / 3
+        return self.rho_b * np.sum(d.V[d.radial_centres <=  d.R_reservoir])
 
     # Pressure related parameters
     beta    : float = 3.5e-10   # Pa^{-1}, liquid water compressibility
