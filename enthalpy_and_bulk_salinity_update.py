@@ -1,5 +1,24 @@
-from classes import p, d, state
+####################################################################################
+# Functions included in this script, in order: 
+# calculate_liquid_enthalpy(state)
+# calculate_ice_enthalpy(state)
+# calculate_enthalpy(state)
+# calculate_bulk_salinity(state)
+# calculate_liquid_density_at_faces(state)
+# calculate_liquid_enthalpy_at_faces(state)
+# calculate_flow_speed_at_faces(state)
+# calculate_weighted_thermal_conductivity_at_faces(state)
+# calculate_heat_flux(state)
+# calculate_enthalpic_flux(state)
+# calculate_enthalpy_update(state)
+# calculate_liquid_salinity_at_faces(state)
+# calculate_bulk_salinity_update(state)
+####################################################################################
+
+
+from classes import p, d
 import numpy as np
+
 
 ####################################################################################
 # Enthalpy
@@ -197,5 +216,3 @@ def calculate_bulk_salinity_update(state):
     G_theta = d.A_polar_faces  * rho_l_polar_faces * C_l_polar_faces * u_polar_faces
 
     return - d.dt * (G_r[1:, :] - G_r[:-1, :] + G_theta[:, 1:] - G_theta[:, :-1])/ d.V
-
-

@@ -1,3 +1,13 @@
+####################################################################################
+# Functions included in this script, in order: 
+# calculate_overpressure_term(state)
+# calculate_liquid_density(state)
+# calculate_liquidus_temperature(state)
+# calculate_eutectic_temperature(state)
+# get_reservoir_geometry_mask()
+####################################################################################
+
+
 import numpy as np
 from classes import p, d
 

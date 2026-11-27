@@ -5,16 +5,15 @@ from classes import p, d, state
 from enthalpy_and_bulk_salinity_update import (
                     calculate_enthalpy_update,
                     calculate_bulk_salinity_update, 
-                    calculate_overpressure_term, 
-                    calculate_liquid_density,
                     calculate_liquid_enthalpy, 
                     calculate_ice_enthalpy, 
                     calculate_enthalpy,
                     calculate_bulk_salinity
-                       )
-
+)
 from phase_mask_and_inversion import inversion
-
+from misc_functions import calculate_liquid_density, calculate_overpressure_term
+from Darcy_flow_solver import calculate_perturbation_pressures
+    
 # Initial values
 ice            = d.radial_centres > d.R_reservoir
 state.chi[ice] = 0.0   
@@ -29,9 +28,14 @@ state.S[ice] = 0.0
 
 # Iteration index        
 i = 0
+dP_old = 0.0
 
 # Main loop
 while i < d.N_iter:
+
+    # perturbation pressure and darcy flow velocity
+    P_prime = calculate_perturbation_pressures(state, dP_old)
+     = calculate_flow_speed_at_faces(state)
    
     # Update enthalpy without overpressure term, and bulk salinity
     dH = calculate_enthalpy_update(state)

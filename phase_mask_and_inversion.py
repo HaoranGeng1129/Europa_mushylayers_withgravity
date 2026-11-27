@@ -1,5 +1,19 @@
+####################################################################################
+# Functions included in this script, in order: 
+# get_liquid_condition(state)
+# get_eutectic_condition(state)
+# get_solid_condition(state)
+# get_phase_masks(state)
+# core_inversion_and_mixing(state, phase_masks)
+# calculate_liquid_fraction(state, phase_masks)
+# calculate_temperature(state, phase_masks)
+# calculate_liquid_salinity(state, phase_masks)
+# inversion(state)
+####################################################################################
+
+
 from classes import p, d
-from enthalpy_and_bulk_salinity_update import calculate_liquid_density, calculate_eutectic_temperature
+from misc_functions import calculate_liquid_density, calculate_eutectic_temperature
 import numpy as np
 
 

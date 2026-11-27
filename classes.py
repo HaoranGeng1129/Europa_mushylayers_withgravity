@@ -19,7 +19,6 @@ class Physical_Parameters:
     k_l    : float = 0.6       # Wm^{-1}K^{-1}, liquid water thermal conductivity
     k_s    : float = 2.3       # Wm^{-1}K^{-1}, pure water ice thermal conductivity
 
-
     @property
     def alpha(self):
         """
@@ -98,6 +97,9 @@ class Physical_Parameters:
         """
         return self.rho_s * self.g * self.depth
 
+    # Permeability
+    Pi_0 : float =  2.0e-8      # m^2, reference permeability
+
 p = Physical_Parameters()
 
 
@@ -105,6 +107,7 @@ p = Physical_Parameters()
 ####################################################################################
 # Store Domain Parameters
 ####################################################################################
+
 class Domain_Parameters: 
     def __init__(self):
         self.N_iter   : int = 10**7              # number of iterations
@@ -131,6 +134,9 @@ class Domain_Parameters:
                                                             self.radial_faces[:-1] ** 2, 
                                                             np.sin(self.polar_faces[:]))
 
+        self.row_with_zeros    = np.zeros((1, self.N_polar))
+        self.column_with_zeros = np.zeros((self.N_radial, 1))
+
         # Volume
         self.V = 2 * np.pi * np.outer(self.radial_faces[1:] ** 3 - self.radial_faces[:-1] ** 3, 
                                 np.cos(self.polar_faces[:-1]) - np.cos(self.polar_faces[1:])) / 3 
@@ -144,6 +150,7 @@ d = Domain_Parameters()
 ####################################################################################
 # Store States (not frozen)
 ####################################################################################
+
 @dataclass(frozen=False)
 class State: 
     H     : np.ndarray    # enthalpy
@@ -184,6 +191,7 @@ state = State(
 ####################################################################################
 # Store Historic Data
 ####################################################################################
+
 @dataclass(frozen=False)
 class Historic_Data:
     T_history     : np.ndarray  # temperature 
