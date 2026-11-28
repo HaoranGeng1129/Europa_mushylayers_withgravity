@@ -12,7 +12,8 @@
 # calculate_gravity_terms(state, mathcal_A_North, mathcal_A_South, mathcal_A_East, mathcal_A_West)
 # calculate_mathcal_A_and_mathcal_B(state, dP_old)
 # calculate_perturbation_pressures(state, dP_old)
-#
+# calculate_flow_speed_at_faces(state)
+# get_flow_direction_masks(state)
 ####################################################################################
 
 
@@ -107,7 +108,6 @@ def calculate_vertical_coordinates_at_polar_faces():
 
 
 
-
 ####################################################################################
 # Terms in mathcal_A (coefficient matrix)
 ####################################################################################
@@ -119,21 +119,21 @@ def calculate_coefficient_in_mathcal_A(state):
     A_North, the coefficient of cell at (i + 1/2, j); 
     A_South, the coefficient of cell at (i - 1/2, j);
     A_East, the coefficient of cell at (i, j + 1/2);
-    A_West, the coefficient of cell at (i, j - 1/2), .    
+    A_West, the coefficient of cell at (i, j - 1/2).    
     np.concatenate() is used on empty rows and columns so that the results are of the 
     same size. 
-    """
-    Pi_radial_faces = calculate_permeability_at_radial_faces(state)
-    Pi_polar_faces  = calculate_permeability_at_polar_faces(state)
+    """ 
+    state.Pi_radial_faces = calculate_permeability_at_radial_faces(state)
+    state.Pi_polar_faces  = calculate_permeability_at_polar_faces(state)
 
-    mathcal_A_radial = d.A_radial_faces[1:-1, :] * Pi_radial_faces / d.dr   # (N_radial - 1, N_polar)
-    mathcal_A_polar  = d.A_polar_faces[:, 1:-1] * Pi_polar_faces / (
+    mathcal_A_radial = d.A_radial_faces[1:-1, :] * state.Pi_radial_faces / d.dr   # (N_radial - 1, N_polar)
+    mathcal_A_polar  = d.A_polar_faces[:, 1:-1] * state.Pi_polar_faces / (
                         d.radial_centres[:, None] * d.dtheta)   # (N_radial, N_polar - 1)
 
-    mathcal_A_radial = np.concatenate([d.row_with_zeros, mathcal_A_radial, d.row_with_zeros] 
-                                      , axis=0)   # (N_radial + 1, N_polar)
-    mathcal_A_polar  = np.concatenate([d.column_with_zeros, mathcal_A_polar, d.column_with_zeros] 
-                                      , axis=1)   # (N_radial, N_polar + 1)
+    mathcal_A_radial = np.concatenate(
+        [d.row_with_zeros, mathcal_A_radial, d.row_with_zeros], axis=0)   # (N_radial + 1, N_polar)
+    mathcal_A_polar  = np.concatenate(
+        [d.column_with_zeros, mathcal_A_polar, d.column_with_zeros], axis=1)   # (N_radial, N_polar + 1)
 
     mathcal_A_North  = mathcal_A_radial[1:, :]     # (N_radial, N_polar)
     mathcal_A_South  = mathcal_A_radial[:-1, :]    # (N_radial, N_polar)
@@ -187,7 +187,7 @@ def calculate_source_term(state, dP_old):
     Size: (N_radial, N_polar)
     """
     change_in_dP_term  = p.beta * state.chi * (state.dP - dP_old) / d.dt
-    change_in_chi_term = (p.rho_s - state.rho_l) * (state.chi - state.chi_old) / (state.rho * d.dt)
+    change_in_chi_term = (p.rho_s - state.rho_l) * (state.chi - state.chi_old) / (state.rho_l * d.dt)
 
     source = p.eta * d.V * (change_in_dP_term - change_in_chi_term) / 2
 
@@ -215,22 +215,28 @@ def calculate_gravity_terms(state, mathcal_A_North, mathcal_A_South, mathcal_A_E
     z_radial_faces = calculate_vertical_coordinates_at_radial_faces()   # (N_radial + 1, N_polar)
     z_polar_faces  = calculate_vertical_coordinates_at_polar_faces()    # (N_radial, N_polar + 1)
 
-    B_radial_centre_minus_face = (rho_l[1:, :] - p.rho_0) * p.g * (
-                                z_centres[1:, :] - z_radial_faces[1:-1, :])  # (N_radial - 1, N_polar)
-    B_radial_face_minus_centre = (rho_l[:-1, :] - p.rho_0) * p.g * (
-                                z_radial_faces[1:-1, :] - z_centres[:-1, :]) # (N_radial - 1, N_polar)
-    B_polar_centre_minus_face = (rho_l[:, 1:] - p.rho_0) * p.g * (
-                                z_centres[:, 1:] - z_polar_faces[:, 1:-1])   # (N_radial, N_polar - 1)
-    B_polar_face_minus_centre = (rho_l[:, :-1] - p.rho_0) * p.g * (
-                                z_polar_faces[:, 1:-1] - z_centres[:, :-1])  # (N_radial, N_polar - 1)
+    B_radial_centre_minus_face = (
+        rho_l[1:, :] - p.rho_0) * p.g * (z_centres[1:, :] - z_radial_faces[1:-1, :]
+    )  # (N_radial - 1, N_polar)
+    B_radial_face_minus_centre = (
+        rho_l[:-1, :] - p.rho_0) * p.g * (z_radial_faces[1:-1, :] - z_centres[:-1, :]
+    ) # (N_radial - 1, N_polar)
+    B_polar_centre_minus_face = (
+        rho_l[:, 1:] - p.rho_0) * p.g * (z_centres[:, 1:] - z_polar_faces[:, 1:-1]
+    )   # (N_radial, N_polar - 1)
+    B_polar_face_minus_centre = (
+        rho_l[:, :-1] - p.rho_0) * p.g * (z_polar_faces[:, 1:-1] - z_centres[:, :-1]
+    )  # (N_radial, N_polar - 1)
 
-    B_radial = B_radial_centre_minus_face + B_radial_face_minus_centre       # (N_radial - 1, N_polar)
-    B_polar  = B_polar_centre_minus_face + B_polar_face_minus_centre         # (N_radial, N_polar - 1)
+    B_radial_no_boundaries = B_radial_centre_minus_face + B_radial_face_minus_centre     
+    B_polar_no_boundaries  = B_polar_centre_minus_face + B_polar_face_minus_centre      
 
-    B_radial = np.concatenate([d.row_with_zeros, B_radial, d.row_with_zeros]
-                              , axis=0)     # (N_radial + 1, N_polar)
-    B_polar  = np.concatenate([d.column_with_zeros, B_polar, d.column_with_zeros]
-                              , axis=1)     # (N_radial, N_polar + 1)
+    B_radial = np.concatenate(
+        [d.row_with_zeros, B_radial_no_boundaries, d.row_with_zeros], axis=0
+    )     # (N_radial + 1, N_polar)
+    B_polar  = np.concatenate(
+        [d.column_with_zeros, B_polar_no_boundaries, d.column_with_zeros], axis=1
+    )     # (N_radial, N_polar + 1)
 
     B_North  = mathcal_A_North * B_radial[1:, :]     # (N_radial, N_polar)
     B_South  = mathcal_A_South * B_radial[:-1, :]    # (N_radial, N_polar)
@@ -239,7 +245,7 @@ def calculate_gravity_terms(state, mathcal_A_North, mathcal_A_South, mathcal_A_E
 
     gravity_term = (- B_North + B_South - B_East + B_West).ravel()
 
-    return gravity_term 
+    return B_radial_no_boundaries, B_polar_no_boundaries, gravity_term 
 
 
 
@@ -262,26 +268,54 @@ def calculate_mathcal_A_and_mathcal_B(state, dP_old):
 
     # mathcal_B
     source = calculate_source_term(state, dP_old)
-    gravity_terms = calculate_gravity_terms(state, A_North, A_South, A_East, A_West)
+    B_radial_no_boundaries, B_polar_no_boundaries, gravity_terms = calculate_gravity_terms(
+        state, A_North, A_South, A_East, A_West
+    )
 
     mathcal_B = source + gravity_terms
 
-    return mathcal_A, mathcal_B
+    return mathcal_A, mathcal_B, B_radial_no_boundaries, B_polar_no_boundaries
 
 
-def calculate_perturbation_pressures(state, dP_old):
+def calculate_perturbation_pressures(mathcal_A, mathcal_B):
     """ 
     A linear solve, mathcal_A P' = mathcal_B, using np.spsolve
     """
-    mathcal_A, mathcal_B = calculate_mathcal_A_and_mathcal_B(state, dP_old)
+    P_prime = spla.spsolve(mathcal_A, mathcal_B)
+
+    return P_prime.reshape(d.N_radial, d.N_polar)
 
 
 
-    return
+####################################################################################
+# Darcy velocities
+####################################################################################
 
+def calculate_flow_speed_at_faces(state, dP_old):
+    """ 
+    From Darcy's law (radial), 
+    u_radial_faces 
+    Size: (N_radial + 1, N_polar)
 
+    and from Darcy's law (polar), 
+    u_polar_faces 
+    Size: (N_radial, N_polar + 1)
+    
+    """
+    mathcal_A, mathcal_B, B_radial_no_boundaries, B_polar_no_boundaries = calculate_mathcal_A_and_mathcal_B(state, dP_old)
 
+    P_prime = calculate_perturbation_pressures(mathcal_A, mathcal_B)
 
+    radial_term_in_brackets = P_prime[1:, :] - P_prime[:-1, :] + B_radial_no_boundaries
+    polar_term_in_brackets  = P_prime[:, 1:] - P_prime[:, :-1] + B_polar_no_boundaries
 
+    # Of sizes (N_radial - 1, N_polar) and (N_radial, N_polar - 1), respectively
+    u_radial_faces = - 2 * state.Pi_radial_faces * radial_term_in_brackets/ (p.eta * d.dr)
+    u_polar_faces  = - 2 * state.Pi_polar_faces * polar_term_in_brackets/ (
+                    p.eta * d.radial_centres[:, None] * d.dtheta)
 
+    # Imposing zero flow boundary conditions
+    u_radial_faces = np.concatenate([d.row_with_zeros, u_radial_faces, d.row_with_zeros], axis=0)
+    u_polar_faces  = np.concatenate([d.column_with_zeros, u_polar_faces, d.column_with_zeros], axis=1)
 
+    return u_radial_faces, u_polar_faces

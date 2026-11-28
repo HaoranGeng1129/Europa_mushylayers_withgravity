@@ -6,7 +6,6 @@
 # calculate_bulk_salinity(state)
 # calculate_liquid_density_at_faces(state)
 # calculate_liquid_enthalpy_at_faces(state)
-# calculate_flow_speed_at_faces(state)
 # calculate_weighted_thermal_conductivity_at_faces(state)
 # calculate_heat_flux(state)
 # calculate_enthalpic_flux(state)
@@ -67,43 +66,36 @@ def calculate_bulk_salinity(state):
 
 
 ####################################################################################
-# Enthalpy Update
+# Functions that calculate upwind values for an arbitrary physical quantity
 ####################################################################################
 
-def calculate_liquid_density_at_faces(state):
-    """
-    
+def calculate_upwind_values_at_faces(state, physical_quantity):
     """ 
-    rho_l_radial_faces = 0
-    rho_l_polar_faces  = 0
+    Calculates the liquid density, liquid enthalpy and liquid salinity at the faces 
+    from their upwind values. "physical_quantity" is a dummy variable, defined at 
+    the cell centres, i.e. liquid density, liquid enthalpy or liquid salinity. 
 
-    return rho_l_radial_faces, rho_l_polar_faces
-
-
-def calculate_liquid_enthalpy_at_faces(state):
-    """ 
-    
+    Consider the cell face at position (i + 1/2, j), if the radial flow velocity is 
+    greater than 0.0, the flow is from the the (i, j) cell into the (i + 1, j) cell. 
+    A similar argument is constructed for the polar flow velocity. 
     """
-    state.h_l = calculate_liquid_enthalpy(state)    
+    physical_quantity_on_radial_faces = np.zeros((d.N_radial + 1, d.N_polar))
+    physical_quantity_on_polar_faces  = np.zeros((d.N_radial, d.N_polar + 1))
 
-    h_l_radial_faces = 0 
-    h_l_polar_faces  = 0 
+    physical_quantity_on_radial_faces[1:-1, :] = np.where(
+        state.u_radial_faces[1:-1, :] > 0.0, physical_quantity[:-1, :], physical_quantity[1:, :]
+    )
+    physical_quantity_on_polar_faces[1:-1, :]  = np.where(
+        state.u_polar_faces[:, 1:-1] > 0.0, physical_quantity[:, :-1], physical_quantity[:, 1:]
+    )
 
-    return h_l_radial_faces, h_l_polar_faces
+    return physical_quantity_on_radial_faces, physical_quantity_on_polar_faces
 
 
-def calculate_flow_speed_at_faces(state):
-    """ 
-    From Darcy's law (radial), 
 
-    and from Darcy's law (polar), 
-    
-    """
-    u_radial_faces = 0
-    u_polar_faces  = 0
-
-    return u_radial_faces, u_polar_faces
-
+####################################################################################
+# Enthalpy Update
+####################################################################################
 
 def calculate_weighted_thermal_conductivity_at_faces(state):
     """ 
@@ -163,14 +155,13 @@ def calculate_enthalpic_flux(state):
 
     J_theta = ρ_l h_l u_theta + q_theta.
     """
-    rho_l_radial_faces, rho_l_polar_faces = calculate_liquid_density_at_faces(state)
-    h_l_radial_faces, h_l_polar_faces     = calculate_liquid_enthalpy_at_faces(state)
-    u_radial_faces, u_polar_faces         = calculate_flow_speed_at_faces(state)
+    rho_l_radial_faces, rho_l_polar_faces = calculate_upwind_values_at_faces(state, state.rho_l)
+    h_l_radial_faces, h_l_polar_faces     = calculate_upwind_values_at_faces(state, state.h_l)
 
     q_radial_faces, q_polar_faces = calculate_heat_flux(state)
 
-    J_radial_faces = rho_l_radial_faces * h_l_radial_faces * u_radial_faces + q_radial_faces
-    J_polar_faces  = rho_l_polar_faces * h_l_polar_faces * u_polar_faces + q_polar_faces
+    J_radial_faces = rho_l_radial_faces * h_l_radial_faces * state.u_radial_faces + q_radial_faces
+    J_polar_faces  = rho_l_polar_faces * h_l_polar_faces * state.u_polar_faces + q_polar_faces
 
     return J_radial_faces, J_polar_faces
 
@@ -188,31 +179,18 @@ def calculate_enthalpy_update(state):
 
 
 
-
-
 ####################################################################################
 # Bulk Salinity Update
 ####################################################################################
-
-def calculate_liquid_salinity_at_faces(state):
-    """ 
-    
-    """
-    C_l_radial_faces = 0.0
-    C_l_polar_faces  = 0.0
-
-    return C_l_radial_faces, C_l_polar_faces
-
 
 def calculate_bulk_salinity_update(state):
     """ 
     dS = dt (G_r{i+1/2, j} - G_r{i-1/2, j} + G_theta{i, j+1/2} - G_theta{i, j-1/2}) / V
     """
-    rho_l_radial_faces, rho_l_polar_faces = calculate_liquid_density_at_faces(state)
-    C_l_radial_faces, C_l_polar_faces     = calculate_liquid_salinity_at_faces(state)
-    u_radial_faces, u_polar_faces         = calculate_flow_speed_at_faces(state)
+    rho_l_radial_faces, rho_l_polar_faces = calculate_upwind_values_at_faces(state, state.rho_l)
+    C_radial_faces, C_polar_faces         = calculate_upwind_values_at_faces(state, state.C)
 
-    G_r     = d.A_radial_faces * rho_l_radial_faces * C_l_radial_faces * u_radial_faces
-    G_theta = d.A_polar_faces  * rho_l_polar_faces * C_l_polar_faces * u_polar_faces
+    G_r     = d.A_radial_faces * rho_l_radial_faces * C_radial_faces * state.u_radial_faces
+    G_theta = d.A_polar_faces  * rho_l_polar_faces * C_polar_faces * state.u_polar_faces
 
     return - d.dt * (G_r[1:, :] - G_r[:-1, :] + G_theta[:, 1:] - G_theta[:, :-1])/ d.V

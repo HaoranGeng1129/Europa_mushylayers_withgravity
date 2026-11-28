@@ -162,7 +162,14 @@ class State:
     C     : np.ndarray    # liquid salinity 
     chi   : np.ndarray    # liquid fraction
 
-    dP    : float         # overpressure term
+    dP      : float         # overpressure term
+    P_prime : np.ndarray    # perturbation pressure term
+
+    u_radial_faces  : np.ndarray   # radial Darcy flow speed
+    u_polar_faces   : np.ndarray   # polar Darcy flow speed\
+
+    Pi_radial_faces : np.ndarray   # permeability on radial faces
+    Pi_polar_faces  : np.ndarray   # permeability on polar faces
 
     rho_l_old   : np.ndarray    # Store old liquid density values
     chi_old     : np.ndarray    # Store old liquid fraction values
@@ -182,6 +189,11 @@ state = State(
         C     = np.full(shape_centre, p.C_init), 
         chi   = np.ones(shape_centre),
         dP    = 0.0, 
+        P_prime   = np.zeros(shape_centre),
+        u_radial_faces  = np.zeros(shape_radial_faces),
+        u_polar_faces   = np.zeros(shape_polar_faces),
+        Pi_radial_faces = np.zeros(shape_radial_faces),
+        Pi_polar_faces  = np.zeros(shape_polar_faces),
         rho_l_old = np.zeros(shape_centre), 
         chi_old   = np.zeros(shape_centre)
               ) 
@@ -201,4 +213,3 @@ class Historic_Data:
 
     time_history  : np.ndarray
     dP_history    : np.ndarray  # overpressure term 
-
